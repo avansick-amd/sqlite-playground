@@ -1,0 +1,28 @@
+# Build directory
+build/
+
+# Database files
+*.db
+*.db-journal
+!schemas/*.sql
+
+# Backup files
+*.bak
+*.backup
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Compiled binaries
+benchmark_schema
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Real data (large database files)
+benchmark_data/*.db
