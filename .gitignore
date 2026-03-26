@@ -1,5 +1,15 @@
 # Build directory
-build/
+build*/
+
+# Python files
+scripts/__pycache__/*
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
 
 # Database files
 *.db

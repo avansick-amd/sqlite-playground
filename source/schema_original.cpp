@@ -1,7 +1,11 @@
 #include "schema_original.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
+// Inserts reference rows (node, process, threads, agents, queues, streams, code
+// objects, kernels) required before kernel dispatch rows can be loaded.
 void populateOriginalRefs(sqlite3* db, const RefData& refs) {
     sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
 
@@ -79,9 +83,15 @@ void populateOriginalRefs(sqlite3* db, const RefData& refs) {
     sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
 }
 
-void insertOriginalDispatches(sqlite3* db, const std::vector<KernelDispatch>& dispatches) {
-    sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+namespace {
 
+constexpr int kOriginalDispatchBindsPerRow = 14;
+// Cap batch size below SQLITE_LIMIT_VARIABLE_NUMBER (999); 64 * 14 = 896.
+constexpr size_t kOriginalDispatchChunkRows = 64;
+
+// Inserts each dispatch with a single-row prepared statement (bind, step, reset).
+static void insert_original_dispatches_one_by_one(
+    sqlite3* db, const std::vector<KernelDispatch>& dispatches) {
     sqlite3_stmt* stmt;
     const char* sql =
         "INSERT INTO rocpd_kernel_dispatch "
@@ -111,9 +121,113 @@ void insertOriginalDispatches(sqlite3* db, const std::vector<KernelDispatch>& di
     }
 
     sqlite3_finalize(stmt);
+}
+
+// Rows per multi-row INSERT: min(64, SQLITE_LIMIT_VARIABLE_NUMBER / binds per row).
+static size_t chunk_row_count_original(sqlite3* db) {
+    int lim = sqlite3_limit(db, SQLITE_LIMIT_VARIABLE_NUMBER, -1);
+    if (lim < kOriginalDispatchBindsPerRow) {
+        return 1;
+    }
+    const size_t max_by_limit =
+        static_cast<size_t>(lim / kOriginalDispatchBindsPerRow);
+    return std::min(kOriginalDispatchChunkRows, max_by_limit);
+}
+
+// Builds INSERT ... VALUES (row), (row), ... with the given number of placeholder rows.
+static std::string build_original_multi_insert_sql(size_t row_count) {
+    static const char kPrefix[] =
+        "INSERT INTO rocpd_kernel_dispatch "
+        "(nid, pid, tid, agent_id, kernel_id, dispatch_id, queue_id, stream_id, "
+        "start, \"end\", workgroup_size_x, workgroup_size_y, workgroup_size_z, "
+        "grid_size_x, grid_size_y, grid_size_z) VALUES ";
+    std::string sql;
+    sql.reserve(sizeof(kPrefix) + row_count * 60);
+    sql = kPrefix;
+    for (size_t r = 0; r < row_count; ++r) {
+        if (r > 0) {
+            sql += ", ";
+        }
+        sql += "(1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    }
+    return sql;
+}
+
+// Binds `count` consecutive dispatches starting at `offset` into a multi-row stmt.
+static void bind_original_chunk(sqlite3_stmt* stmt,
+                                const std::vector<KernelDispatch>& dispatches, size_t offset,
+                                size_t count) {
+    int idx = 1;
+    for (size_t r = 0; r < count; ++r) {
+        const auto& d = dispatches[offset + r];
+        sqlite3_bind_int(stmt, idx++, d.tid);
+        sqlite3_bind_int(stmt, idx++, d.agent_id);
+        sqlite3_bind_int(stmt, idx++, d.kernel_id);
+        sqlite3_bind_int(stmt, idx++, d.dispatch_id);
+        sqlite3_bind_int(stmt, idx++, d.queue_id);
+        sqlite3_bind_int(stmt, idx++, d.stream_id);
+        sqlite3_bind_int64(stmt, idx++, d.start);
+        sqlite3_bind_int64(stmt, idx++, d.end);
+        sqlite3_bind_int(stmt, idx++, d.workgroup_size_x);
+        sqlite3_bind_int(stmt, idx++, d.workgroup_size_y);
+        sqlite3_bind_int(stmt, idx++, d.workgroup_size_z);
+        sqlite3_bind_int(stmt, idx++, d.grid_size_x);
+        sqlite3_bind_int(stmt, idx++, d.grid_size_y);
+        sqlite3_bind_int(stmt, idx++, d.grid_size_z);
+    }
+}
+
+// Multi-row INSERT in chunks of n: reuse one prepared stmt for full chunks; one-off
+// stmt for the final partial chunk. Falls back to one-by-one if n == 1.
+static void insert_original_dispatches_chunked(
+    sqlite3* db, const std::vector<KernelDispatch>& dispatches) {
+    const size_t n = chunk_row_count_original(db);
+    if (n == 1) {
+        insert_original_dispatches_one_by_one(db, dispatches);
+        return;
+    }
+
+    const std::string sql_full = build_original_multi_insert_sql(n);
+    sqlite3_stmt* stmt_full = nullptr;
+    sqlite3_prepare_v2(db, sql_full.c_str(), static_cast<int>(sql_full.size()),
+                       &stmt_full, nullptr);
+
+    size_t offset = 0;
+    for (; offset + n <= dispatches.size(); offset += n) {
+        bind_original_chunk(stmt_full, dispatches, offset, n);
+        sqlite3_step(stmt_full);
+        sqlite3_reset(stmt_full);
+        sqlite3_clear_bindings(stmt_full);
+    }
+    sqlite3_finalize(stmt_full);
+
+    if (offset < dispatches.size()) {
+        const size_t m = dispatches.size() - offset;
+        const std::string sql_tail = build_original_multi_insert_sql(m);
+        sqlite3_stmt* stmt_tail = nullptr;
+        sqlite3_prepare_v2(db, sql_tail.c_str(), static_cast<int>(sql_tail.size()),
+                             &stmt_tail, nullptr);
+        bind_original_chunk(stmt_tail, dispatches, offset, m);
+        sqlite3_step(stmt_tail);
+        sqlite3_finalize(stmt_tail);
+    }
+}
+
+}  // namespace
+
+// Wraps dispatch insert in a transaction; uses chunked or one-by-one path.
+void insertOriginalDispatches(sqlite3* db, const std::vector<KernelDispatch>& dispatches,
+                              bool chunk_inserts) {
+    sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    if (chunk_inserts) {
+        insert_original_dispatches_chunked(db, dispatches);
+    } else {
+        insert_original_dispatches_one_by_one(db, dispatches);
+    }
     sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
 }
 
+// Benchmark read path: JOIN + ORDER BY; return value aggregates a column so the work stays live.
 int64_t readOriginalDispatches(sqlite3* db) {
     sqlite3_stmt* stmt;
     const char* sql =

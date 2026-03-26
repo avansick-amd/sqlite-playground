@@ -51,16 +51,24 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/schemas/rocpd_tables.sql
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/schemas/rocpd_tables_combined.sql
                ${CMAKE_CURRENT_BINARY_DIR}/rocpd_tables_combined.sql
                COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/schemas/rocpd_tables_indexed.sql
-               ${CMAKE_CURRENT_BINARY_DIR}/rocpd_tables_indexed.sql
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/schemas/rocpd_indexes.sql
+               ${CMAKE_CURRENT_BINARY_DIR}/rocpd_indexes.sql
                COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/schemas/rocpd_tables_combined_indexed.sql
-               ${CMAKE_CURRENT_BINARY_DIR}/rocpd_tables_combined_indexed.sql
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/schemas/rocpd_combined_indexes.sql
+               ${CMAKE_CURRENT_BINARY_DIR}/rocpd_combined_indexes.sql
                COPYONLY)
 
 # Copy real database to build directory for benchmarking
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/benchmark_data/rocpd-7389.db
                ${CMAKE_CURRENT_BINARY_DIR}/benchmark_data/rocpd-7389.db
+               COPYONLY)
+
+# Helper script: run benchmarks and summarize (python3 run_benchmark.py from build dir)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmark.py
+               ${CMAKE_CURRENT_BINARY_DIR}/run_benchmark.py
+               COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/analyze_benchmark_json.py
+               ${CMAKE_CURRENT_BINARY_DIR}/analyze_benchmark_json.py
                COPYONLY)
 
 # Print build information
