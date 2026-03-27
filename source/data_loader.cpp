@@ -5,15 +5,36 @@
 
 void extractRealData(const std::string& db_path,
                      std::vector<KernelDispatch>& dispatches,
-                     RefData& refs) {
+                     RefData& refs,
+                     DispatchExtractOrder dispatch_order) {
+    dispatches.clear();
+    refs = RefData{};
+
     sqlite3* db = nullptr;
     if (sqlite3_open_v2(db_path.c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
         fprintf(stderr, "Failed to open %s\n", db_path.c_str());
         return;
     }
 
+    const char* order_clause = "";
+    const char* order_label = "";
+    switch (dispatch_order) {
+        case DispatchExtractOrder::ByStart:
+            order_clause = " ORDER BY start";
+            order_label = "ORDER BY start";
+            break;
+        case DispatchExtractOrder::ById:
+            order_clause = " ORDER BY id";
+            order_label = "ORDER BY id";
+            break;
+        case DispatchExtractOrder::Unordered:
+            order_clause = "";
+            order_label = "no ORDER BY";
+            break;
+    }
+
     sqlite3_stmt* stmt;
-    char sql[1024];
+    char sql[1536];
 
     // Extract node
     snprintf(sql, sizeof(sql),
@@ -97,14 +118,13 @@ void extractRealData(const std::string& db_path,
     }
     sqlite3_finalize(stmt);
 
-    // Extract dispatches
     snprintf(sql, sizeof(sql),
              "SELECT nid, pid, tid, agent_id, kernel_id, dispatch_id, queue_id, "
              "stream_id, "
              "start, \"end\", workgroup_size_x, workgroup_size_y, workgroup_size_z, "
              "grid_size_x, grid_size_y, grid_size_z "
-             "FROM rocpd_kernel_dispatch_%s ORDER BY start",
-             GUID);
+             "FROM rocpd_kernel_dispatch_%s%s",
+             GUID, order_clause);
     sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr);
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         KernelDispatch d;
@@ -130,8 +150,8 @@ void extractRealData(const std::string& db_path,
 
     sqlite3_close(db);
 
-    printf("Extracted: %zu dispatches, %zu threads, %zu agents, %zu queues, %zu "
+    printf("Extracted (%s): %zu dispatches, %zu threads, %zu agents, %zu queues, %zu "
            "streams, %zu kernels\n",
-           dispatches.size(), refs.threads.size(), refs.agents.size(),
+           order_label, dispatches.size(), refs.threads.size(), refs.agents.size(),
            refs.queues.size(), refs.streams.size(), refs.kernels.size());
 }

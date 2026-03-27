@@ -63,12 +63,15 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/benchmark_data/rocpd-7389.db
                ${CMAKE_CURRENT_BINARY_DIR}/benchmark_data/rocpd-7389.db
                COPYONLY)
 
-# Helper script: run benchmarks and summarize (python3 run_benchmark.py from build dir)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmark.py
-               ${CMAKE_CURRENT_BINARY_DIR}/run_benchmark.py
-               COPYONLY)
+# Helpers copied next to the built benchmark (run from build dir)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/analyze_benchmark_json.py
                ${CMAKE_CURRENT_BINARY_DIR}/analyze_benchmark_json.py
+               COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/explain_read_plans.sh
+               ${CMAKE_CURRENT_BINARY_DIR}/explain_read_plans.sh
+               COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_initial_deferred_read.sh
+               ${CMAKE_CURRENT_BINARY_DIR}/compare_initial_deferred_read.sh
                COPYONLY)
 
 # Print build information
