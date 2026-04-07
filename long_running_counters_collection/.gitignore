@@ -1,0 +1,40 @@
+# --- sqlite-playground-style baseline ---
+
+# Build directory
+build*/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
+
+# SQLite databases and journals (multi-GB captures — never commit)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Full DB clones + experimental indexes from setup_bench_copies
+bench_copies/
+
+# Backup files
+*.bak
+*.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
