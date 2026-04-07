@@ -48,3 +48,8 @@ bool executeSqlFile(sqlite3* db, const std::string& sql_file) {
     file.close();
     return executeSql(db, buffer.str());
 }
+
+void applyReadBenchmarkPragmas(sqlite3* db) {
+    sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
+    sqlite3_exec(db, "PRAGMA locking_mode = NORMAL;", nullptr, nullptr, nullptr);
+}

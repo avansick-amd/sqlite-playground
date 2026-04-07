@@ -1,4 +1,5 @@
 #include "benchmarks.h"
+#include "asset_paths.h"
 #include "data_loader.h"
 #include "db_helpers.h"
 #include "schema_original.h"
@@ -6,6 +7,7 @@
 #include <benchmark/benchmark.h>
 #include <cstddef>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 // Global data storage
@@ -13,34 +15,30 @@ std::vector<KernelDispatch> g_dispatches;
 RefData g_refs;
 bool g_data_loaded = false;
 
-namespace {
-
-void ensureDataLoaded() {
+void ensureBenchmarkDataLoaded() {
     if (!g_data_loaded) {
-        extractRealData("benchmark_data/rocpd-7389.db", g_dispatches, g_refs);
+        extractRealData(benchmarkAsset("benchmark_data/rocpd-7389.db"), g_dispatches,
+                        g_refs);
         g_data_loaded = true;
     }
 }
 
-void applyReadConnectionPragmas(sqlite3* db) {
-    sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
-    sqlite3_exec(db, "PRAGMA locking_mode = NORMAL;", nullptr, nullptr, nullptr);
-}
+namespace {
 
 template <bool ChunkedInserts, bool NoFKExclAccess, bool SupplementalIndexes, bool DeferredIndexes>
 void BM_Write_Original(benchmark::State& state) {
-    ensureDataLoaded();
+    ensureBenchmarkDataLoaded();
     const std::string kDb = std::string(state.name()) + ".db";
     for (auto _ : state) {
-        sqlite3* db = createDatabase("rocpd_tables.sql", kDb, !NoFKExclAccess,
-                                     NoFKExclAccess);
+        sqlite3* db = createDatabase(benchmarkAsset("rocpd_tables.sql"), kDb,
+                                     !NoFKExclAccess, NoFKExclAccess);
         if constexpr (SupplementalIndexes && !DeferredIndexes) {
-            executeSqlFile(db, "rocpd_indexes.sql");
+            executeSqlFile(db, benchmarkAsset("rocpd_indexes.sql"));
         }
         populateOriginalRefs(db, g_refs);
         insertOriginalDispatches(db, g_dispatches, ChunkedInserts);
         if constexpr (SupplementalIndexes && DeferredIndexes) {
-            executeSqlFile(db, "rocpd_indexes.sql");
+            executeSqlFile(db, benchmarkAsset("rocpd_indexes.sql"));
         }
         sqlite3_close(db);
     }
@@ -51,19 +49,19 @@ void BM_Write_Original(benchmark::State& state) {
 
 template <bool ChunkedInserts, bool NoFKExclAccess, bool SupplementalIndexes, bool DeferredIndexes>
 void BM_Write_Combined(benchmark::State& state) {
-    ensureDataLoaded();
+    ensureBenchmarkDataLoaded();
     const std::string kDb = std::string(state.name()) + ".db";
     for (auto _ : state) {
         sqlite3* db =
-            createDatabase("rocpd_tables_combined.sql", kDb, !NoFKExclAccess,
-                           NoFKExclAccess);
+            createDatabase(benchmarkAsset("rocpd_tables_combined.sql"), kDb,
+                           !NoFKExclAccess, NoFKExclAccess);
         if constexpr (SupplementalIndexes && !DeferredIndexes) {
-            executeSqlFile(db, "rocpd_combined_indexes.sql");
+            executeSqlFile(db, benchmarkAsset("rocpd_combined_indexes.sql"));
         }
         populateCombinedRefs(db, g_refs, g_dispatches);
         insertCombinedDispatches(db, g_dispatches, ChunkedInserts);
         if constexpr (SupplementalIndexes && DeferredIndexes) {
-            executeSqlFile(db, "rocpd_combined_indexes.sql");
+            executeSqlFile(db, benchmarkAsset("rocpd_combined_indexes.sql"));
         }
         sqlite3_close(db);
     }
@@ -74,22 +72,23 @@ void BM_Write_Combined(benchmark::State& state) {
 
 template <bool SupplementalIndexes, bool DeferredIndexes>
 void BM_Read_Original(benchmark::State& state) {
-    ensureDataLoaded();
+    ensureBenchmarkDataLoaded();
     const std::string kDb = std::string(state.name()) + ".db";
-    sqlite3* db_load = createDatabase("rocpd_tables.sql", kDb, true, false);
+    sqlite3* db_load =
+        createDatabase(benchmarkAsset("rocpd_tables.sql"), kDb, true, false);
     if constexpr (SupplementalIndexes && !DeferredIndexes) {
-        executeSqlFile(db_load, "rocpd_indexes.sql");
+        executeSqlFile(db_load, benchmarkAsset("rocpd_indexes.sql"));
     }
     populateOriginalRefs(db_load, g_refs);
     insertOriginalDispatches(db_load, g_dispatches, false);
     if constexpr (SupplementalIndexes && DeferredIndexes) {
-        executeSqlFile(db_load, "rocpd_indexes.sql");
+        executeSqlFile(db_load, benchmarkAsset("rocpd_indexes.sql"));
     }
     sqlite3_close(db_load);
 
     sqlite3* db_read = nullptr;
     sqlite3_open(kDb.c_str(), &db_read);
-    applyReadConnectionPragmas(db_read);
+    applyReadBenchmarkPragmas(db_read);
 
     for (auto _ : state) {
         benchmark::DoNotOptimize(readOriginalDispatches(db_read));
@@ -102,23 +101,23 @@ void BM_Read_Original(benchmark::State& state) {
 
 template <bool SupplementalIndexes, bool DeferredIndexes>
 void BM_Read_Combined(benchmark::State& state) {
-    ensureDataLoaded();
+    ensureBenchmarkDataLoaded();
     const std::string kDb = std::string(state.name()) + ".db";
     sqlite3* db_load =
-        createDatabase("rocpd_tables_combined.sql", kDb, true, false);
+        createDatabase(benchmarkAsset("rocpd_tables_combined.sql"), kDb, true, false);
     if constexpr (SupplementalIndexes && !DeferredIndexes) {
-        executeSqlFile(db_load, "rocpd_combined_indexes.sql");
+        executeSqlFile(db_load, benchmarkAsset("rocpd_combined_indexes.sql"));
     }
     populateCombinedRefs(db_load, g_refs, g_dispatches);
     insertCombinedDispatches(db_load, g_dispatches, false);
     if constexpr (SupplementalIndexes && DeferredIndexes) {
-        executeSqlFile(db_load, "rocpd_combined_indexes.sql");
+        executeSqlFile(db_load, benchmarkAsset("rocpd_combined_indexes.sql"));
     }
     sqlite3_close(db_load);
 
     sqlite3* db_read = nullptr;
     sqlite3_open(kDb.c_str(), &db_read);
-    applyReadConnectionPragmas(db_read);
+    applyReadBenchmarkPragmas(db_read);
 
     for (auto _ : state) {
         benchmark::DoNotOptimize(readCombinedDispatches(db_read));
@@ -127,6 +126,63 @@ void BM_Read_Combined(benchmark::State& state) {
                             static_cast<int64_t>(g_dispatches.size()));
     sqlite3_close(db_read);
     std::remove(kDb.c_str());
+}
+
+// Control: read the shipped ROCpd capture in place (GUID-suffixed tables), no synthetic DB.
+void BM_Read_ROCpdSourceFile(benchmark::State& state) {
+    const std::string src = benchmarkAsset("benchmark_data/rocpd-7389.db");
+    sqlite3* db = nullptr;
+    if (sqlite3_open_v2(src.c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        state.SkipWithError("failed to open benchmark_data/rocpd-7389.db");
+        return;
+    }
+    applyReadBenchmarkPragmas(db);
+    const int64_t n_disp = countRocpdSourceDispatches(db);
+    if (n_disp <= 0) {
+        sqlite3_close(db);
+        state.SkipWithError("no rows in rocpd_kernel_dispatch_<GUID> (wrong schema?)");
+        return;
+    }
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(readRocpdSourceDispatchJoin(db));
+    }
+    state.SetItemsProcessed(state.iterations() * n_disp);
+    sqlite3_close(db);
+}
+
+// Copy source file, add supplemental indexes on the real dispatch table, then read (timed).
+void BM_Read_ROCpdSourceFile_IndexedCopy(benchmark::State& state) {
+    namespace fs = std::filesystem;
+    const std::string src = benchmarkAsset("benchmark_data/rocpd-7389.db");
+    const std::string work = std::string(state.name()) + ".db";
+    std::error_code ec;
+    fs::remove(work, ec);
+    fs::copy_file(src, work, fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        state.SkipWithError("failed to copy source db for indexed benchmark");
+        return;
+    }
+
+    sqlite3* db_rw = nullptr;
+    sqlite3_open(work.c_str(), &db_rw);
+    createRocpdSourceSchemaPerformanceIndexes(db_rw);
+    sqlite3_close(db_rw);
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open_v2(work.c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        fs::remove(work, ec);
+        state.SkipWithError("failed to open indexed copy");
+        return;
+    }
+    applyReadBenchmarkPragmas(db);
+    const int64_t n_disp = countRocpdSourceDispatches(db);
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(readRocpdSourceDispatchJoin(db));
+    }
+    state.SetItemsProcessed(state.iterations() * n_disp);
+    sqlite3_close(db);
+    fs::remove(work, ec);
 }
 
 BENCHMARK_TEMPLATE(BM_Write_Original, false, false, false, false)
@@ -138,6 +194,9 @@ BENCHMARK_TEMPLATE(BM_Write_Original, true, false, false, false)
 BENCHMARK_TEMPLATE(BM_Read_Original, false, false)
     ->Name("BM_Read_Original")
     ->Unit(benchmark::kMillisecond);
+
+BENCHMARK(BM_Read_ROCpdSourceFile)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Read_ROCpdSourceFile_IndexedCopy)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_TEMPLATE(BM_Write_Original, false, true, false, false)
     ->Name("BM_Write_Original_NoFKExclAccess")

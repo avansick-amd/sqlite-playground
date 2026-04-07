@@ -33,7 +33,10 @@ add_executable(benchmark_schema
     source/schema_original.cpp
     source/schema_combined.cpp
     source/benchmarks.cpp
+    source/cli_read_campaign.cpp
+    source/asset_paths.cpp
 )
+target_include_directories(benchmark_schema PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/source)
 target_link_libraries(benchmark_schema
     PRIVATE
         SQLite::SQLite3
@@ -63,12 +66,11 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/benchmark_data/rocpd-7389.db
                ${CMAKE_CURRENT_BINARY_DIR}/benchmark_data/rocpd-7389.db
                COPYONLY)
 
-# Helper script: run benchmarks and summarize (python3 run_benchmark.py from build dir)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmark.py
-               ${CMAKE_CURRENT_BINARY_DIR}/run_benchmark.py
-               COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/analyze_benchmark_json.py
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/analyze_benchmark_json.py
                ${CMAKE_CURRENT_BINARY_DIR}/analyze_benchmark_json.py
+               COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/run_read_campaign.sh
+               ${CMAKE_CURRENT_BINARY_DIR}/run_read_campaign.sh
                COPYONLY)
 
 # Print build information

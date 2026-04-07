@@ -246,3 +246,65 @@ int64_t readOriginalDispatches(sqlite3* db) {
     sqlite3_finalize(stmt);
     return sum;
 }
+
+int64_t readRocpdSourceDispatchJoin(sqlite3* db) {
+    char sql[768];
+    snprintf(sql, sizeof(sql),
+             "SELECT d.id, d.nid, d.pid, d.tid, d.agent_id, d.kernel_id, "
+             "d.dispatch_id, d.queue_id, d.stream_id, d.start, d.\"end\", k.kernel_name "
+             "FROM rocpd_kernel_dispatch_%s d "
+             "JOIN rocpd_info_kernel_symbol_%s k ON d.kernel_id = k.id "
+             "ORDER BY d.start",
+             GUID, GUID);
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, static_cast<int>(strlen(sql)), &stmt, nullptr) !=
+        SQLITE_OK) {
+        return 0;
+    }
+    int64_t sum = 0;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        sum += sqlite3_column_int64(stmt, 9);
+    }
+    sqlite3_finalize(stmt);
+    return sum;
+}
+
+int64_t countRocpdSourceDispatches(sqlite3* db) {
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM rocpd_kernel_dispatch_%s", GUID);
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, static_cast<int>(strlen(sql)), &stmt, nullptr) !=
+        SQLITE_OK) {
+        return 0;
+    }
+    int64_t n = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        n = sqlite3_column_int64(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    return n;
+}
+
+void createRocpdSourceSchemaPerformanceIndexes(sqlite3* db) {
+    char tbl[160];
+    snprintf(tbl, sizeof(tbl), "rocpd_kernel_dispatch_%s", GUID);
+    struct {
+        const char* cols;
+        const char* name;
+    } idx[] = {
+        {"(tid)", "tid"},
+        {"(agent_id)", "agent"},
+        {"(kernel_id)", "kernel"},
+        {"(queue_id)", "queue"},
+        {"(stream_id)", "stream"},
+        {"(start, kernel_id)", "start_kernel"},
+        {"(tid, start)", "tid_start"},
+    };
+    char sql[384];
+    for (const auto& i : idx) {
+        snprintf(sql, sizeof(sql),
+                 "CREATE INDEX IF NOT EXISTS idx_src_dispatch_%s ON %s%s", i.name, tbl,
+                 i.cols);
+        sqlite3_exec(db, sql, nullptr, nullptr, nullptr);
+    }
+}

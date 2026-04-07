@@ -15,3 +15,6 @@ bool executeSql(sqlite3* db, const std::string& sql);
 
 // Read SQL from a file and execute it (e.g. deferred CREATE INDEX after bulk load).
 bool executeSqlFile(sqlite3* db, const std::string& sql_file);
+
+// Connection settings used when timing read-only benchmarks.
+void applyReadBenchmarkPragmas(sqlite3* db);

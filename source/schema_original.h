@@ -16,3 +16,13 @@ void insertOriginalDispatches(sqlite3* db, const std::vector<KernelDispatch>& di
 
 // Read and process dispatches from original schema
 int64_t readOriginalDispatches(sqlite3* db);
+
+// Read path for a real ROCpd capture file (tables `rocpd_*_<GUID>`), same JOIN shape as
+// readOriginalDispatches but with GUID-suffixed names.
+int64_t readRocpdSourceDispatchJoin(sqlite3* db);
+
+// CREATE INDEX on `rocpd_kernel_dispatch_<GUID>` (supplemental perf indexes, RW connection).
+void createRocpdSourceSchemaPerformanceIndexes(sqlite3* db);
+
+// Row count in `rocpd_kernel_dispatch_<GUID>` (for items_per_second counters).
+int64_t countRocpdSourceDispatches(sqlite3* db);
